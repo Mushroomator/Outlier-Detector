@@ -119,22 +119,20 @@ test_data_path, model_path = configReader.get_model_data_config()
 # sio.connect(ws_url)
 
 
-def convert_to_png_bytes(image):
+def convert_to_png(image):
     """
-    Convert an image from its numpy array representation to a PNG byte stream.
+    Convert an image from its numpy array representation to a PNG.
 
     :param image: Image
     :type image: np.array
     :return:
     """
-    img_bytes_arr = BytesIO()
-    # convert nparray back to pillow image
-    im = Image.fromarray(np.uint8(image))
-    # save image to byte stream
-    im.save(img_bytes_arr, format="PNG")
-    # move file pointer back to the start
-    img_bytes_arr.seek(0)
-    return img_bytes_arr
+    dmin = np.min(image)
+    dmax = np.max(image)
+    drange =dmax-dmin
+    dscale = 255.0/drange
+    
+    return Image.fromarray(((image-dmin)*dscale).astype('uint8'), 'RGB')
 
 
 def upload_img_to_object_storage(fname, image, metadata):
