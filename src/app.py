@@ -20,104 +20,120 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(name)s]  [%(level
 logger = logging.getLogger(__name__)
 logger.info("Starting application...")
 
-# max_reconnection_delay_in_s = 20
-# # Read configuration for WebSocket client
-# ws_url, ws_event = configReader.get_websocket_config()
-# # Create WebSocket client
-# sio = socketio.Client(reconnection=True, reconnection_attempts=0, reconnection_delay=5)
+max_reconnection_delay_in_s = 20
+# Read configuration for WebSocket client
+ws_url, ws_event = configReader.get_websocket_config()
+# Create WebSocket client
+sio = socketio.Client(reconnection=True, reconnection_attempts=0, reconnection_delay=5)
 
-# # Read configuration for object storage
-# obj_storage_host, bucket_url, bucket_name = configReader.get_obj_storage_config()
-# # Create object storage client
-# obj_store = Minio(
-#     obj_storage_host,
-#     access_key="admin",
-#     secret_key="alongerpw",
-#     secure=False
-# )
+# Read configuration for object storage
+obj_storage_host, bucket_url, bucket_name = configReader.get_obj_storage_config()
+# Create object storage client
+obj_store = Minio(
+    obj_storage_host,
+    access_key="admin",
+    secret_key="alongerpw",
+    secure=False
+)
 
 # Read configuration for model and test data
 test_data_path, model_path = configReader.get_model_data_config()
 
-# def signal_handler(sig, frame):
-#     """
-#     Handle signals. Especially important for Docker
-#
-#     :param sig: singal
-#     :type sig: int
-#     :param frame: Frame
-#     :type frame: sys.FrameType
-#     :return:
-#     """
-#     logger.info("Received signal %s. Gracefully shutting down application...", str(sig))
-#     sio.disconnect()
-#     logger.info("Application shutdown.")
-#     exit(0)
-#
-#
-# signal(SIGINT, signal_handler)
+def signal_handler(sig, frame):
+    """
+    Handle signals. Especially important for Docker
+
+    :param sig: singal
+    :type sig: int
+    :param frame: Frame
+    :type frame: sys.FrameType
+    :return:
+    """
+    logger.info("Received signal %s. Gracefully shutting down application...", str(sig))
+    sio.disconnect()
+    logger.info("Application shutdown.")
+    exit(0)
 
 
-# def get_reconnection_ival():
-#     """
-#     Generator to get the connection interval.
-#     Double the connection interval every time until the maximum interval is reached.
-#
-#     :return: interval until next reconnection should be attempted
-#     """
-#     prev_ival = 0.5
-#     while True:
-#         new_ival = prev_ival * 2
-#         if new_ival > max_reconnection_delay_in_s:
-#             new_ival = max_reconnection_delay_in_s
-#         yield float(new_ival)
-#         prev_ival = new_ival
-#
-#
-# reconnect_generator = get_reconnection_ival()
-#
-#
-# @sio.event
-# def connect():
-#     """
-#     Callback called when a connection with the WebSocket server was successfully established
-#
-#     :return:
-#     """
-#     logger.info("Client connected to WebSocket server at %s", ws_url)
-#     # new generator is required so retry interval will start at beginning again
-#     reconnect_generator = get_reconnection_ival()
-#
-#
-# @sio.event
-# def connect_error(data):
-#     """
-#     Callback called when there was a connection error when trying to connect to the WebSocket server.
-#
-#     :param data: details on error
-#     :return:
-#     """
-#     logger.info("Failed to connect to WebSocket server at %s. Additional information: %s", ws_url, str(data))
-#     recon_attempt_in_s = reconnect_generator.__next__()
-#     logger.info("Attempting to reconnect in %d seconds...", int(recon_attempt_in_s))
-#     time.sleep(recon_attempt_in_s)
-#     logger.info("Trying to reconnect...")
-#     sio.connect(ws_url)
-#
-#
-# @sio.event
-# def disconnect():
-#     """
-#     Callback called when the client disconnected from the WebSocket server.
-#
-#     :return:
-#     """
-#     logger.info("Client disconnected from WebSocket server at %s", ws_url)
-#
-#
-# logger.info("Connecting to Websocket server")
-# sio.connect(ws_url)
+signal(SIGINT, signal_handler)
 
+
+def get_reconnection_ival():
+    """
+    Generator to get the connection interval.
+    Double the connection interval every time until the maximum interval is reached.
+
+    :return: interval until next reconnection should be attempted
+    """
+    prev_ival = 0.5
+    while True:
+        new_ival = prev_ival * 2
+        if new_ival > max_reconnection_delay_in_s:
+            new_ival = max_reconnection_delay_in_s
+        yield float(new_ival)
+        prev_ival = new_ival
+
+
+reconnect_generator = get_reconnection_ival()
+
+
+@sio.event
+def connect():
+    """
+    Callback called when a connection with the WebSocket server was successfully established
+
+    :return:
+    """
+    logger.info("Client connected to WebSocket server at %s", ws_url)
+    # new generator is required so retry interval will start at beginning again
+    reconnect_generator = get_reconnection_ival()
+
+
+@sio.event
+def connect_error(data):
+    """
+    Callback called when there was a connection error when trying to connect to the WebSocket server.
+
+    :param data: details on error
+    :return:
+    """
+    logger.info("Failed to connect to WebSocket server at %s. Additional information: %s", ws_url, str(data))
+    recon_attempt_in_s = reconnect_generator.__next__()
+    logger.info("Attempting to reconnect in %d seconds...", int(recon_attempt_in_s))
+    time.sleep(recon_attempt_in_s)
+    logger.info("Trying to reconnect...")
+    sio.connect(ws_url)
+
+
+@sio.event
+def disconnect():
+    """
+    Callback called when the client disconnected from the WebSocket server.
+
+    :return:
+    """
+    logger.info("Client disconnected from WebSocket server at %s", ws_url)
+
+
+logger.info("Connecting to Websocket server")
+sio.connect(ws_url)
+
+
+def convert_to_png_bytes(image):
+    """
+    Convert an image from its numpy array representation to a PNG byte stream.
+    :param image: Image
+    :type image: np.array
+    :return:
+    """
+    img_bytes_arr = BytesIO()
+    # convert nparray back to pillow image
+    im = convert_to_png(image)
+    # save image to byte stream
+    im.save(img_bytes_arr, format="PNG")
+    # move file pointer back to the start
+    img_bytes_arr.seek(0)
+    return img_bytes_arr
 
 def convert_to_png(image):
     """
@@ -198,32 +214,31 @@ while True:
     img_rec = autoencoder.predict(img[None])[0].reshape(128, 128, 3)
     # check for outlier
     is_outlier, msqe = detect_outlier(img, autoencoder)
-    print(is_outlier)
-    # # common values
-    # utc_now = datetime.utcnow()
-    # utc_4_fname = utc_now.strftime("%Y-%m-%d_%H-%M-%S_%f")
-    # metadata = {"timestamp": utc_now}
-    #
-    # # upload original image
-    # img_fname = f"original_128x128_{utc_4_fname}.png"
-    # upload_img_to_object_storage(img_fname, img, metadata=metadata)
-    #
-    # # upload reconstructed image
-    # img_rec_fname = f"reconstructed_128x128_{utc_4_fname}.png"
-    # upload_img_to_object_storage(img_rec_fname, img_rec, metadata=metadata)
-    #
-    # dataStr = json.dumps({
-    #     "time": utc_now,
-    #     "images": {
-    #         "original": f"{bucket_url}/{img_fname}",
-    #         "reconstructed": f"{bucket_url}/{img_rec_fname}",
-    #     },
-    #     "details": {
-    #         "isOk": not is_outlier,
-    #         "quadraticError": str(msqe)
-    #     }
-    # })
-    # logger.debug("Emitting to event %s: %s", ws_event, dataStr)
-    # sio.emit(ws_event, dataStr)
+    # common values
+    utc_now = datetime.utcnow()
+    utc_4_fname = utc_now.strftime("%Y-%m-%d_%H-%M-%S_%f")
+    metadata = {"timestamp": utc_now}
+
+    # upload original image
+    img_fname = f"original_128x128_{utc_4_fname}.png"
+    upload_img_to_object_storage(img_fname, img, metadata=metadata)
+
+    # upload reconstructed image
+    img_rec_fname = f"reconstructed_128x128_{utc_4_fname}.png"
+    upload_img_to_object_storage(img_rec_fname, img_rec, metadata=metadata)
+
+    dataStr = json.dumps({
+        "time": utc_now.isoformat(),
+        "images": {
+            "original": f"{bucket_url}/{img_fname}",
+            "reconstructed": f"{bucket_url}/{img_rec_fname}",
+        },
+        "details": {
+            "isOk": not is_outlier,
+            "quadraticError": str(msqe)
+        }
+    })
+    logger.debug("Emitting to event %s: %s", ws_event, dataStr)
+    sio.emit(ws_event, dataStr)
 
     time.sleep(image_chosen_ival)
